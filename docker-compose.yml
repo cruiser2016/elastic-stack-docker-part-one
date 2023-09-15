@@ -76,6 +76,7 @@ services:
       retries: 120
 
   es01:
+    container_name: es01
     depends_on:
       setup:
         condition: service_healthy
@@ -120,6 +121,7 @@ services:
       retries: 120
 
   kibana:
+    container_name: kibana
     depends_on:
       es01:
         condition: service_healthy
@@ -152,6 +154,7 @@ services:
       retries: 120
 
   metricbeat01:
+    container_name: metricbeat
     depends_on:
       es01:
         condition: service_healthy
@@ -175,8 +178,11 @@ services:
       - LOGSTASH_HOSTS=http://logstash01:9600
 
   filebeat01:
+    container_name: filebeat
     depends_on:
       es01:
+        condition: service_healthy
+      kibana:
         condition: service_healthy
     image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
     user: root
@@ -195,6 +201,7 @@ services:
       - LOGSTASH_HOSTS=http://logstash01:9600
 
   logstash01:
+    container_name: logstash
     depends_on:
       es01:
         condition: service_healthy
@@ -208,9 +215,36 @@ services:
       - certs:/usr/share/logstash/certs
       - logstashdata01:/usr/share/logstash/data
       - "./logstash_ingest_data/:/usr/share/logstash/ingest_data/"
-      - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro"
+      - "./logstash.conf:/usr/share/logstash/pipeline/logstash.conf"
     environment:
       - xpack.monitoring.enabled=false
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - ELASTIC_HOSTS=https://es01:9200
+    ports:
+      - "1514:1514"
+      - "1514:1514/udp"
+
+  master:
+    container_name: cribl-master
+    image: cribl/cribl:latest
+    environment:
+      - CRIBL_DIST_MODE=master
+      - CRIBL_DIST_MASTER_URL=tcp://criblmaster@0.0.0.0:4200
+      - CRIBL_VOLUME_DIR=/opt/cribl/config-volume
+    ports:
+      - "19000:9000"
+    volumes:
+      - "~/cribl-config:/opt/cribl/config-volume"
+  workers:
+    container_name: cribl-worker
+    image: cribl/cribl:latest
+    depends_on: 
+      - master
+    environment:
+      - CRIBL_DIST_MODE=worker
+      - CRIBL_DIST_MASTER_URL=tcp://criblmaster@master:4200
+    ports:
+      - 9000
+      - "2514:2514"
+      - "2514:2514/udp"
